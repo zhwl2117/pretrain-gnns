@@ -590,50 +590,50 @@ class MoleculeDataset(InMemoryDataset):
                 data_list.append(data)
                 data_smiles_list.append(smiles_list[i])
 
-        elif self.dataset == 'pcba':
-            smiles_list, rdkit_mol_objs, labels = \
-                _load_pcba_dataset(self.raw_paths[0])
-            for i in range(len(smiles_list)):
-                print(i)
-                rdkit_mol = rdkit_mol_objs[i]
-                # # convert aromatic bonds to double bonds
-                # Chem.SanitizeMol(rdkit_mol,
-                #                  sanitizeOps=Chem.SanitizeFlags.SANITIZE_KEKULIZE)
-                data = mol_to_graph_data_obj_simple(rdkit_mol)
-                # manually add mol id
-                data.id = torch.tensor(
-                    [i])  # id here is the index of the mol in
-                # the dataset
-                data.y = torch.tensor(labels[i, :])
-                data_list.append(data)
-                data_smiles_list.append(smiles_list[i])
+        # elif self.dataset == 'pcba':
+        #     smiles_list, rdkit_mol_objs, labels = \
+        #         _load_pcba_dataset(self.raw_paths[0])
+        #     for i in range(len(smiles_list)):
+        #         print(i)
+        #         rdkit_mol = rdkit_mol_objs[i]
+        #         # # convert aromatic bonds to double bonds
+        #         # Chem.SanitizeMol(rdkit_mol,
+        #         #                  sanitizeOps=Chem.SanitizeFlags.SANITIZE_KEKULIZE)
+        #         data = mol_to_graph_data_obj_simple(rdkit_mol)
+        #         # manually add mol id
+        #         data.id = torch.tensor(
+        #             [i])  # id here is the index of the mol in
+        #         # the dataset
+        #         data.y = torch.tensor(labels[i, :])
+        #         data_list.append(data)
+        #         data_smiles_list.append(smiles_list[i])
 
-        elif self.dataset == 'pcba_pretrain':
-            smiles_list, rdkit_mol_objs, labels = \
-                _load_pcba_dataset(self.raw_paths[0])
-            downstream_inchi = set(pd.read_csv(os.path.join(self.root,
-                                                            'downstream_mol_inchi_may_24_2019'),
-                                               sep=',', header=None)[0])
-            for i in range(len(smiles_list)):
-                print(i)
-                if '.' not in smiles_list[i]:   # remove examples with
-                    # multiples species
-                    rdkit_mol = rdkit_mol_objs[i]
-                    mw = Descriptors.MolWt(rdkit_mol)
-                    if 50 <= mw <= 900:
-                        inchi = create_standardized_mol_id(smiles_list[i])
-                        if inchi != None and inchi not in downstream_inchi:
-                            # # convert aromatic bonds to double bonds
-                            # Chem.SanitizeMol(rdkit_mol,
-                            #                  sanitizeOps=Chem.SanitizeFlags.SANITIZE_KEKULIZE)
-                            data = mol_to_graph_data_obj_simple(rdkit_mol)
-                            # manually add mol id
-                            data.id = torch.tensor(
-                                [i])  # id here is the index of the mol in
-                            # the dataset
-                            data.y = torch.tensor(labels[i, :])
-                            data_list.append(data)
-                            data_smiles_list.append(smiles_list[i])
+        # elif self.dataset == 'pcba_pretrain':
+        #     smiles_list, rdkit_mol_objs, labels = \
+        #         _load_pcba_dataset(self.raw_paths[0])
+        #     downstream_inchi = set(pd.read_csv(os.path.join(self.root,
+        #                                                     'downstream_mol_inchi_may_24_2019'),
+        #                                        sep=',', header=None)[0])
+        #     for i in range(len(smiles_list)):
+        #         print(i)
+        #         if '.' not in smiles_list[i]:   # remove examples with
+        #             # multiples species
+        #             rdkit_mol = rdkit_mol_objs[i]
+        #             mw = Descriptors.MolWt(rdkit_mol)
+        #             if 50 <= mw <= 900:
+        #                 inchi = create_standardized_mol_id(smiles_list[i])
+        #                 if inchi != None and inchi not in downstream_inchi:
+        #                     # # convert aromatic bonds to double bonds
+        #                     # Chem.SanitizeMol(rdkit_mol,
+        #                     #                  sanitizeOps=Chem.SanitizeFlags.SANITIZE_KEKULIZE)
+        #                     data = mol_to_graph_data_obj_simple(rdkit_mol)
+        #                     # manually add mol id
+        #                     data.id = torch.tensor(
+        #                         [i])  # id here is the index of the mol in
+        #                     # the dataset
+        #                     data.y = torch.tensor(labels[i, :])
+        #                     data_list.append(data)
+        #                     data_smiles_list.append(smiles_list[i])
 
         # elif self.dataset == ''
 
