@@ -2,3 +2,4 @@ chem/dataset
 runs
 chem/__pycache__
 nohups
+test.ipynb
