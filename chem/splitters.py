@@ -93,18 +93,22 @@ def scaffold_split(dataset, smiles_list, task_idx=None, null_value=0,
     assert len(set(test_idx).intersection(set(valid_idx))) == 0
 
     train_dataset = dataset[torch.tensor(train_idx)]
+    label_sets = dataset.split_label_set(train_idx)
+    data_subsets = {}
+    for key in label_sets.keys():
+        data_subsets[key] = data_subsets[torch.from_numpy(label_sets[key])]
     valid_dataset = dataset[torch.tensor(valid_idx)]
     test_dataset = dataset[torch.tensor(test_idx)]
 
     if not return_smiles:
-        return train_dataset, valid_dataset, test_dataset
+        return train_dataset, valid_dataset, test_dataset, data_subsets
     else:
         train_smiles = [smiles_list[i][1] for i in train_idx]
         valid_smiles = [smiles_list[i][1] for i in valid_idx]
         test_smiles = [smiles_list[i][1] for i in test_idx]
         return train_dataset, valid_dataset, test_dataset, (train_smiles,
                                                             valid_smiles,
-                                                            test_smiles)
+                                                            test_smiles), data_subsets
 
 def random_scaffold_split(dataset, smiles_list, task_idx=None, null_value=0,
                    frac_train=0.8, frac_valid=0.1, frac_test=0.1, seed=0):

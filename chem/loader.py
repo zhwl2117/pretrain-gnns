@@ -293,6 +293,17 @@ class MoleculeDataset(InMemoryDataset):
             print(len(self.label_sets))
 
 
+    def split_label_set(self, data_idx):
+        sub_label_set = {}
+        np_idx = np.array(data_idx)
+        query_idx = np.array(data_idx).reshape(-1, 1)
+        for key in self.label_sets.keys():
+            indexes = np.array(list(self.label_sets[key]))
+            in_label = np.any(query_idx == indexes, 1)
+            sub_label_set[key] = np_idx[in_label]
+        return sub_label_set
+
+
     def get(self, idx):
         data = Data()
         for key in self.data.keys:

@@ -11,7 +11,7 @@ import torch.optim as optim
 from tqdm import tqdm
 import numpy as np
 
-from model import GNN, GNN_graphpred
+from model import GNN, GNN_graphpred, GNN_pool
 from sklearn.metrics import roc_auc_score
 
 from splitters import scaffold_split, random_split, random_scaffold_split
@@ -150,7 +150,7 @@ def main():
     
     if args.split == "scaffold":
         smiles_list = pd.read_csv('chem/dataset/' + args.dataset + '/processed/smiles.csv', header=None)[0].tolist()
-        train_dataset, valid_dataset, test_dataset = scaffold_split(dataset, smiles_list, null_value=0, frac_train=0.8,frac_valid=0.1, frac_test=0.1)
+        train_dataset, valid_dataset, test_dataset, train_subsets = scaffold_split(dataset, smiles_list, null_value=0, frac_train=0.8,frac_valid=0.1, frac_test=0.1)
         print("scaffold")
     elif args.split == "random":
         train_dataset, valid_dataset, test_dataset = random_split(dataset, null_value=0, frac_train=0.8,frac_valid=0.1, frac_test=0.1, seed = args.seed)
@@ -167,13 +167,17 @@ def main():
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers = args.num_workers)
     val_loader = DataLoader(valid_dataset, batch_size=args.batch_size, shuffle=False, num_workers = args.num_workers)
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers = args.num_workers)
+    for key in train_subsets.keys():
+        train_subsets[key] = DataLoader(train_subsets[key], batch_size=500, shuffle=True)  #NOTE temporally fixed params
 
     #set up model
-    model = GNN_graphpred(args.num_layer, args.emb_dim, num_tasks, JK = args.JK, drop_ratio = args.dropout_ratio, graph_pooling = args.graph_pooling, gnn_type = args.gnn_type)
+    # model = GNN_graphpred(args.num_layer, args.emb_dim, num_tasks, JK = args.JK, drop_ratio = args.dropout_ratio, graph_pooling = args.graph_pooling, gnn_type = args.gnn_type)
+    backbone_model = GNN_pool(args.num_layer, args.emb_dim, num_tasks, JK = args.JK, drop_ratio = args.dropout_ratio, graph_pooling = args.graph_pooling, gnn_type = args.gnn_type)
+    set_model = GNN_pool(args.num_layer, args.emb_dim, num_tasks, JK = args.JK, drop_ratio = args.dropout_ratio, graph_pooling = args.graph_pooling, gnn_type = args.gnn_type)
     if not args.input_model_file == "":
-        model.from_pretrained(args.input_model_file)
+        backbone_model.from_pretrained(args.input_model_file)
     
-    model.to(device)
+    backbone_model.to(device)
 
     #set up optimizer
     #different learning rate for different part of GNN
