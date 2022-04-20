@@ -16,6 +16,7 @@ from torch_geometric.data import Data
 from torch_geometric.data import InMemoryDataset
 from torch_geometric.data import Batch
 from itertools import repeat, product, chain
+from collections import defaultdict
 
 
 # allowable node and edge features
@@ -287,6 +288,9 @@ class MoleculeDataset(InMemoryDataset):
 
         if not empty:
             self.data, self.slices = torch.load(self.processed_paths[0])
+            with open(self.processed_paths[0][:-3]+'.pkl', 'rb') as f:
+                self.label_sets = pickle.load(f)
+            print(len(self.label_sets))
 
 
     def get(self, idx):
@@ -318,6 +322,7 @@ class MoleculeDataset(InMemoryDataset):
     def process(self):
         data_smiles_list = []
         data_list = []
+        label_sets = defaultdict(list)
 
         if self.dataset == 'zinc_standard_agent':
             input_path = self.raw_paths[0]
@@ -442,6 +447,9 @@ class MoleculeDataset(InMemoryDataset):
                 data.y = torch.tensor(labels[i, :])
                 data_list.append(data)
                 data_smiles_list.append(smiles_list[i])
+                for label_idx, label in enumerate(labels[i, :]):
+                    if label != 0:
+                        label_sets[label_idx].append(i)
 
         elif self.dataset == 'hiv':
             smiles_list, rdkit_mol_objs, labels = \
@@ -736,6 +744,8 @@ class MoleculeDataset(InMemoryDataset):
 
         data, slices = self.collate(data_list)
         torch.save((data, slices), self.processed_paths[0])
+        with open(self.processed_paths[0][:-3]+'.pkl', 'wb') as f:
+            pickle.dump(label_sets, f)
 
 # NB: only properly tested when dataset_1 is chembl_with_labels and dataset_2
 # is pcba_pretrain
