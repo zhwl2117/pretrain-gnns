@@ -1,4 +1,5 @@
 import argparse
+from typing import Iterable
 
 from loader import MoleculeDataset
 from torch_geometric.data import DataLoader
@@ -11,7 +12,7 @@ import torch.optim as optim
 from tqdm import tqdm
 import numpy as np
 
-from model import GNN, GNN_graphpred, GNN_pool
+from model import GNN, MLP, GNN_aggregator, GNN_graphpred, GNN_pool
 from sklearn.metrics import roc_auc_score
 
 from splitters import scaffold_split, random_split, random_scaffold_split
@@ -24,12 +25,30 @@ from tensorboardX import SummaryWriter
 
 criterion = nn.BCEWithLogitsLoss(reduction = "none")
 
-def train(args, model, device, loader, optimizer):
-    model.train()
+def train(args, backbone_model, encoder_model, classifier, device, loader, subsets, optimizer):
+    backbone_model.train()
+    encoder_model.train()
+    classifier.train()
+    subset_iterator = {}
+    for key in subsets.keys():
+        subset_iterator[key] = iter(subsets[key])
 
     for step, batch in enumerate(tqdm(loader, desc="Iteration")):
         batch = batch.to(device)
-        pred = model(batch.x, batch.edge_index, batch.edge_attr, batch.batch)
+        global_feature = backbone_model(batch.x, batch.edge_index, batch.edge_attr, batch.batch)
+        local_features = {}
+        preds = []
+        for key in sorted(subsets):
+            try:
+                context = subset_iterator[key].next().to(device)
+            except StopIteration:
+                subset_iterator[key] = iter(subsets[key])
+                context = subset_iterator[key].next().to(device)
+            local_feature = encoder_model(context.x, context.edge_index, context.edge_attr, context.batch)
+            local_features[key] = local_feature
+            pred = classifier(global_feature, local_feature)
+            preds.append(pred)
+        pred = torch.cat(preds, dim=1)
         y = batch.y.view(pred.shape).to(torch.float64)
 
         #Whether y is non-null or not.
@@ -46,16 +65,32 @@ def train(args, model, device, loader, optimizer):
         optimizer.step()
 
 
-def eval(args, model, device, loader):
-    model.eval()
+def eval(args, backbone_model, encoder_model, classifier, subsets, device, loader):
+    backbone_model.eval()
+    encoder_model.eval()
+    classifier.eval()
     y_true = []
     y_scores = []
+    subset_iterator = {}
+    for key in subsets.keys():
+        subset_iterator[key] = iter(subsets[key])
 
     for step, batch in enumerate(tqdm(loader, desc="Iteration")):
         batch = batch.to(device)
 
         with torch.no_grad():
-            pred = model(batch.x, batch.edge_index, batch.edge_attr, batch.batch)
+            global_feature = backbone_model(batch.x, batch.edge_index, batch.edge_attr, batch.batch)
+            preds = []
+            for key in sorted(subset_iterator):
+                try:
+                    context = subset_iterator[key].next().to(device)
+                except StopIteration:
+                    subset_iterator[key] = iter(subsets[key])
+                    context = subset_iterator[key].next().to(device)
+                local_feature = encoder_model(context.x, context.edge_index, context.edge_attr, context.batch)
+                pred = classifier(global_feature, local_feature)
+                preds.append(pred)
+            pred = torch.cat(preds, dim=1)
 
         y_true.append(batch.y.view(pred.shape))
         y_scores.append(pred)
@@ -173,19 +208,23 @@ def main():
     #set up model
     # model = GNN_graphpred(args.num_layer, args.emb_dim, num_tasks, JK = args.JK, drop_ratio = args.dropout_ratio, graph_pooling = args.graph_pooling, gnn_type = args.gnn_type)
     backbone_model = GNN_pool(args.num_layer, args.emb_dim, num_tasks, JK = args.JK, drop_ratio = args.dropout_ratio, graph_pooling = args.graph_pooling, gnn_type = args.gnn_type)
-    set_model = GNN_pool(args.num_layer, args.emb_dim, num_tasks, JK = args.JK, drop_ratio = args.dropout_ratio, graph_pooling = args.graph_pooling, gnn_type = args.gnn_type)
+    set_model = GNN_aggregator(args.num_layer, args.emb_dim, num_tasks, JK = args.JK, drop_ratio = args.dropout_ratio, graph_pooling = args.graph_pooling, gnn_type = args.gnn_type)
+    classifier = MLP(1, 2*args.emb_dim)
     if not args.input_model_file == "":
         backbone_model.from_pretrained(args.input_model_file)
     
     backbone_model.to(device)
+    set_model.to(device)
+    classifier.to(device)
 
     #set up optimizer
     #different learning rate for different part of GNN
     model_param_group = []
-    model_param_group.append({"params": model.gnn.parameters()})
-    if args.graph_pooling == "attention":
-        model_param_group.append({"params": model.pool.parameters(), "lr":args.lr*args.lr_scale})
-    model_param_group.append({"params": model.graph_pred_linear.parameters(), "lr":args.lr*args.lr_scale})
+    model_param_group.append({"params": backbone_model.gnn.parameters()})
+    # if args.graph_pooling == "attention":
+    #     model_param_group.append({"params": model.pool.parameters(), "lr":args.lr*args.lr_scale})
+    model_param_group.append({"params": set_model.gnn.parameters()})
+    model_param_group.append({"params": classifier.parameters(), "lr":args.lr * args.lr_scale})
     optimizer = optim.Adam(model_param_group, lr=args.lr, weight_decay=args.decay)
     print(optimizer)
 
@@ -205,16 +244,16 @@ def main():
     for epoch in range(1, args.epochs+1):
         print("====epoch " + str(epoch))
         
-        train(args, model, device, train_loader, optimizer)
+        train(args, backbone_model, set_model, classifier, device, train_loader, train_subsets, optimizer)
 
         print("====Evaluation")
         if args.eval_train:
-            train_acc = eval(args, model, device, train_loader)
+            train_acc = eval(args, backbone_model, set_model, device, train_loader)
         else:
             print("omit the training accuracy computation")
             train_acc = 0
-        val_acc = eval(args, model, device, val_loader)
-        test_acc = eval(args, model, device, test_loader)
+        val_acc = eval(args, backbone_model, set_model, classifier, train_subsets, device, val_loader)
+        test_acc = eval(args, backbone_model, set_model, classifier, train_subsets, device, test_loader)
 
         print("train: %f val: %f test: %f" %(train_acc, val_acc, test_acc))
 

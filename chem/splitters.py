@@ -96,7 +96,7 @@ def scaffold_split(dataset, smiles_list, task_idx=None, null_value=0,
     label_sets = dataset.split_label_set(train_idx)
     data_subsets = {}
     for key in label_sets.keys():
-        data_subsets[key] = data_subsets[torch.from_numpy(label_sets[key])]
+        data_subsets[key] = dataset[torch.tensor(label_sets[key])]
     valid_dataset = dataset[torch.tensor(valid_idx)]
     test_dataset = dataset[torch.tensor(test_idx)]
 
