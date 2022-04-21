@@ -26,7 +26,7 @@ from tensorboardX import SummaryWriter
 criterion = nn.BCEWithLogitsLoss(reduction = "none")
 
 def train(args, backbone_model, encoder_model, classifier, device, loader, subsets, optimizer):
-    backbone_model.train()
+    backbone_model.eval()
     encoder_model.train()
     classifier.train()
     subset_iterator = {}
@@ -212,6 +212,7 @@ def main():
     classifier = MLP(1, 2*args.emb_dim)
     if not args.input_model_file == "":
         backbone_model.from_pretrained(args.input_model_file)
+        set_model.from_pretrained(args.input_model_file)
     
     backbone_model.to(device)
     set_model.to(device)
@@ -219,8 +220,10 @@ def main():
 
     #set up optimizer
     #different learning rate for different part of GNN
+    for k, v in backbone_model.named_parameters():
+        v.requires_grad = False
     model_param_group = []
-    model_param_group.append({"params": backbone_model.gnn.parameters()})
+    # model_param_group.append({"params": backbone_model.gnn.parameters()})
     # if args.graph_pooling == "attention":
     #     model_param_group.append({"params": model.pool.parameters(), "lr":args.lr*args.lr_scale})
     model_param_group.append({"params": set_model.gnn.parameters()})
